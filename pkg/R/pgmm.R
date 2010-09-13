@@ -137,9 +137,10 @@ pgmm <- function(formula, data, subset, na.action,
   yX <- mapply(function(x, y){ attr(x, "nats") <- y;x}, yX, nats, SIMPLIFY=FALSE)
 
   # Create the matrix of time dummies.
-  namest <- levels(attr(data, "index")[,2])
+  namest <- NULL
   if (effect == "twoways"){
-    if (transformation == "ld"){
+      namest <- levels(attr(data, "index")[,2])
+      if (transformation == "ld"){
       td <- cbind(1, rbind(0, diag(1, T - 1)))
       # remove as many columns and row as there are lost time series
       # in level (the difference of position between rows and columns
@@ -298,7 +299,8 @@ pgmm <- function(formula, data, subset, na.action,
   B1 <- solve(crossprod(WX, t(crossprod(WX, A1))))
   Y1 <- crossprod(t(crossprod(WX, A1)), Wy)
   coefficients <- as.numeric(crossprod(B1, Y1))
-  names(coefficients) <- c(namesX, namest)
+  if(effect=="twoways") names(coefficients) <- c(namesX, namest)
+  else names(coefficients) <- namesX
   residuals <- lapply(yX,
                       function(x)
                       as.vector(x[,1] -  crossprod(t(x[,-1]), coefficients)))
@@ -311,11 +313,13 @@ pgmm <- function(formula, data, subset, na.action,
     coef1s <- coefficients
     Y2 <- crossprod(t(crossprod(WX, A2)), Wy)
     coefficients <- as.numeric(crossprod(B2, Y2))
-    names(coefficients) <- c(namesX, namest)
+    if(effect=="twoways") names(coefficients) <- c(namesX, namest)
+    else names(coefficients) <- namesX
     vcov <- B2
   }
   else vcov <- B1
-  rownames(vcov) <- colnames(vcov) <- c(namesX, namest)
+  if(effect=="twoways") rownames(vcov) <- colnames(vcov) <- c(namesX, namest)
+  else rownames(vcov) <- colnames(vcov) <- namesX
   residuals <- lapply(yX,
                       function(x){
                         nz <- rownames(x)
