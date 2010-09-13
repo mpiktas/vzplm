@@ -300,7 +300,6 @@ pgmm <- function(formula, data, subset, na.action,
   Y1 <- crossprod(t(crossprod(WX, A1)), Wy)
   coefficients <- as.numeric(crossprod(B1, Y1))
   names(coefficients) <- c(namesX, namest)
- 
   residuals <- lapply(yX,
                       function(x)
                       as.vector(x[,1] -  crossprod(t(x[,-1]), coefficients)))
