@@ -299,8 +299,8 @@ pgmm <- function(formula, data, subset, na.action,
   B1 <- solve(crossprod(WX, t(crossprod(WX, A1))))
   Y1 <- crossprod(t(crossprod(WX, A1)), Wy)
   coefficients <- as.numeric(crossprod(B1, Y1))
-  if(effect=="twoways") names(coefficients) <- c(namesX, namest)
-  else names(coefficients) <- namesX
+  names(coefficients) <- c(namesX, namest)
+ 
   residuals <- lapply(yX,
                       function(x)
                       as.vector(x[,1] -  crossprod(t(x[,-1]), coefficients)))
@@ -313,13 +313,11 @@ pgmm <- function(formula, data, subset, na.action,
     coef1s <- coefficients
     Y2 <- crossprod(t(crossprod(WX, A2)), Wy)
     coefficients <- as.numeric(crossprod(B2, Y2))
-    if(effect=="twoways") names(coefficients) <- c(namesX, namest)
-    else names(coefficients) <- namesX
+    names(coefficients) <- c(namesX, namest)
     vcov <- B2
   }
   else vcov <- B1
-  if(effect=="twoways") rownames(vcov) <- colnames(vcov) <- c(namesX, namest)
-  else rownames(vcov) <- colnames(vcov) <- namesX
+  rownames(vcov) <- colnames(vcov) <- c(namesX, namest)
   residuals <- lapply(yX,
                       function(x){
                         nz <- rownames(x)
