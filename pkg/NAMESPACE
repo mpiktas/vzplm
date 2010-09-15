@@ -9,6 +9,8 @@ importFrom(kinship, bdsmatrix)
 importFrom(sandwich, vcovHC)
 importFrom(nlme, fixef)
 importFrom(MASS, ginv)
+importFrom(plyr,ldply)
+
 #pFormula
 S3method(model.frame, pFormula)
 S3method(model.matrix, pFormula)
@@ -47,6 +49,7 @@ S3method(print, summary.plm)
 S3method(coef, pgmm)
 S3method(summary, pgmm)
 S3method(print, summary.pgmm)
+S3method(fitted,pgmm)
 #pvcm
 S3method(summary, pvcm)
 S3method(print, summary.pvcm)

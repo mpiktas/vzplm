@@ -109,7 +109,9 @@ pgmm <- function(formula, data, subset, na.action,
   
   # Get the covariates matrix, split it by individual 
   attr(data, "formula") <- formula(main.form)
+  
   yX <- extract.data(data)
+  datayX <- yX
   namesX <- colnames(yX[[1]])[-1]
   # Get a list of missing time series for each individual
   rn <- lapply(yX, rownames)
@@ -333,6 +335,7 @@ pgmm <- function(formula, data, subset, na.action,
                  fitted.values = fitted.values,
                  df.residual = df.residual, 
                  model = yX, W = W, A1 = A1, A2 = A2,
+                 data = datayX, index = index,
                  call = cl, args = args)
   result <- structure(result, class = c("pgmm", "panelmodel"),
                       pdim = pdim)
