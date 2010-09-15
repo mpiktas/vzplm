@@ -335,7 +335,7 @@ pgmm <- function(formula, data, subset, na.action,
                  fitted.values = fitted.values,
                  df.residual = df.residual, 
                  model = yX, W = W, A1 = A1, A2 = A2,
-                 data = datayX, index = index,
+                 data = datayX, index = index, level.form = main.form,
                  call = cl, args = args)
   result <- structure(result, class = c("pgmm", "panelmodel"),
                       pdim = pdim)
@@ -357,6 +357,99 @@ dynterms <- function(x){
   resu
 }
 
+forecast.pgmm <- function(x,data,start,end,
+                          inverse = function(x)x,
+                          intercept = c("none","global","individual"),
+                          output = c("pseries","pdata.frame")
+                          ) {
+
+    intercept <- match.arg(intercept)
+    output <- match.arg(output)
+    
+    mf <- match.call(expand.dots = FALSE)
+    m <- match(c("formula", "data", "subset", "na.action", "index"),names(mf),0)
+    mf <- mf[c(1,m)]
+    mf$drop.unused.levels <- TRUE
+    mf[[1]] <- as.name("plm")
+    mf$model <- NA
+    mf$formula <- formula(x$level.form)
+    mf$na.action <- "na.pass"
+    mf$data <- as.name("newdata")
+
+    endoname <- all.vars(x$level.form[[2]])
+
+    if(!(endoname %in% colnames(data))) {
+        endoname <- as.character(x$level.form[[2]])
+        if(!endoname %in% colnames(data)) 
+        stop("Endogenous variable is not present in data set")
+    }
+
+    ###Rearange original data. It is necessary for time parameter to be
+    indn <- colnames(x$index)
+    data <- data[,c(indn,colnames(data)[! colnames(data) %in% indn])]
+    data[,2] <- as.numeric(data[,2])
+    data <- data[order(data[,1],data[,2]),]
+  
+    
+    if(x$args$model=="twosteps") coeffs <- x$coefficients[[2]]
+    else coeffs <- x$coefficients
+    
+    min.time <- min(as.numeric(attr(x,"pdim")$panel.names$time.names))
+    
+    if(x$args$effect=="twoways") {
+        notd <- length(x$arg$namest)
+        ncoeff <- length(coeffs)
+        td <- diag(1,notd)
+        rownames(td) <- x$arg$namest
+
+        zerotd <- matrix(0,ncol=notd,nrow=length(min.year:end))
+        rownames(zerotd) <- as.character(min.time:end)
+        colnames(zerotd) <- notd
+        zerotd[rownames(td),] <- td
+        td <- zerotd
+    }
+
+    if(intercept != "none") alpha <- fitted(x,intercept=intercept)$intercept
+    
+    max.lag <- max(sapply(dynterms(x$level.form),max))
+    for(cy in start:end) {
+        fdata <- eval(mf, list(newdata=
+                               data[data[, 2] >= cy - max.lag & data[, 2] <= cy,]))
+        attr(fdata,"formula") <- formula(x$level.form)
+        yX <- extract.data(fdata)
+
+        if(x$args$effect=="twoways") {
+            prodXc <- mapply(function(x) {
+                X <- cbind(x[,-1],matrix(NA,nrow=nrow(x),ncol=notd))
+                tdX <- intersect(rownames(x),rownames(td))
+                X[tdX,ncoeff-notd:1+1] <- td[tdX,]
+                crossprod(t(X),coeffs)
+            },yX,SIMPLIFY=FALSE)
+        }
+        else {
+            prodXc <- mapply(function(x)crossprod(t(x[,-1]),coeffs),yX,SIMPLIFY=FALSE)
+        }
+        if(intercept == "global") {
+            prodXc <- lapply(prodXc,function(l)l+alpha)            
+        }
+        if(intercept == "individual") {
+            prodXc <- mapply(function(x,y)x+y,prodXc,alpha,SIMPLIFY=FALSE)
+        }
+        fit <- ldply(prodXc,function(l)data.frame(time=rownames(l),value=l))
+        fit <- fit[fit[,2]==cy,]
+        fit <- fit[order(fit[,1]),]
+        
+        data[data[,2]==cy, endoname] <- inverse(fit[,3])
+    }
+
+    result <- data[,c(colnames(x$index),endoname)]
+    result <- result[result[,2]>=start & result[,2]<=end,]
+    result <- pdata.frame(result)
+
+    if(output == "pseries") result <- result[,3]
+
+    result
+}
 
 getvar <- function(x){
   x <- as.list(x)
