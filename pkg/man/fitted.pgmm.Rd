@@ -5,13 +5,14 @@
 \description{Extract fitted values of panel GMM model for level equations}
 
 \usage{
-		\method{fitted.values}{pgmm}(object,intercept=c("none","global","individual"),result=c("pseries","pdata.frame"),...)
+		\method{fitted}{pgmm}(object,intercept=c("none","global","individual"),result=c("pseries","pdata.frame"),...)
 }
 
 \arguments{
 		\item{object}{an object of class \code{"pgmm"}}
 		\item{intercept}{the type of intercept for level equation, see Details}
 		\item{result}{how the result is presented. If \code{result="pseries"} the fitted values are returned as a \code{pseries} object with index of data supplied to pgmm. If \code{result="pdata.frame"} then \code{pdata.frame} is returned, with first two columns representing the index of data supplied to pgmm, and the third column the fitted values.}
+		\item{\dots}{further arguments.}
 
 }
 \value{If \code{intercept="none"}, the result is either object of class \code{pseries} or \code{pdata.frame}, depending on argument \code{result}. If \code{intercept!="none"} then the list is returned with the following elements:	
@@ -35,18 +36,18 @@ z1 <- pgmm(log(emp) ~ lag(log(emp), 1:2) + lag(log(wage), 0:1)
            + log(capital) + lag(log(output), 0:1) | lag(log(emp), 2:99),
             data = EmplUK, effect = "twoways", model = "twosteps")
 
-fz1 <- fitted.values(z1)
+fz1 <- fitted(z1)
 fz1
 
 femp <- cbind(EmplUK,fz1)
 
-fz1 <- fitted.values(z1,result = "pdata.frame")
+fz1 <- fitted(z1,result = "pdata.frame")
 femp <- merge(EmplUK,fz1)
 
-fz1 <- fitted.values(z1,result = "pdata.frame",intercept="global")
+fz1 <- fitted(z1,result = "pdata.frame",intercept="global")
 fz1$intercept
 
-fz1 <- fitted.values(z1,result = "pdata.frame",intercept="individual")
+fz1 <- fitted(z1,result = "pdata.frame",intercept="individual")
 fz1$intercept
 
 }
