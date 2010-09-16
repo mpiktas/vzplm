@@ -359,11 +359,10 @@ dynterms <- function(x){
 
 forecast.pgmm <- function(x,data,start,end,
                           inverse = function(x)x,
-                          intercept = c("none","global","individual"),
                           output = c("pseries","pdata.frame")
                           ) {
 
-    intercept <- match.arg(intercept)
+   
     output <- match.arg(output)
     
     mf <- match.call(expand.dots = FALSE)
@@ -407,11 +406,9 @@ forecast.pgmm <- function(x,data,start,end,
         colnames(zerotd) <- notd
         zerotd[rownames(td),] <- td
         td <- zerotd
-    }
-
-    if(intercept != "none") alpha <- fitted(x,intercept=intercept)$intercept
+    }    
     
-    max.lag <- max(sapply(dynterms(x$level.form),max))
+    max.lag <- max(sapply(dynterms(x$level.form),max))+1
     for(cy in start:end) {
         fdata <- eval(mf, list(newdata=
                                data[data[, 2] >= cy - max.lag & data[, 2] <= cy,]))
@@ -423,21 +420,22 @@ forecast.pgmm <- function(x,data,start,end,
                 X <- cbind(x[,-1],matrix(NA,nrow=nrow(x),ncol=notd))
                 tdX <- intersect(rownames(x),rownames(td))
                 X[tdX,ncoeff-notd:1+1] <- td[tdX,]
-                crossprod(t(X),coeffs)
+                crossprod(t(diff(X)),coeffs)
             },yX,SIMPLIFY=FALSE)
         }
         else {
-            prodXc <- mapply(function(x)crossprod(t(x[,-1]),coeffs),yX,SIMPLIFY=FALSE)
+            prodXc <- mapply(function(x)crossprod(t(diff(x[,-1])),coeffs),yX,SIMPLIFY=FALSE)
         }
-        if(intercept == "global") {
-            prodXc <- lapply(prodXc,function(l)l+alpha)            
-        }
-        if(intercept == "individual") {
-            prodXc <- mapply(function(x,y)x+y,prodXc,alpha,SIMPLIFY=FALSE)
-        }
-        fit <- ldply(prodXc,function(l)data.frame(time=rownames(l),value=l))
-        fit <- fit[fit[,2]==cy,]
-        fit <- fit[order(fit[,1]),]
+        
+        fit <- mapply(function(x,y){
+            yy <- y[rownames(x),1,drop=FALSE]
+            yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
+            x+yy
+        },prodXc,yX,SIMPLIFY=FALSE)
+
+       
+        fit <- ldply(fit,function(l)data.frame(time=rownames(l),value=l))
+        fit <- fit[fit[,2]==cy,]        
         
         data[data[,2]==cy, endoname] <- inverse(fit[,3])
     }

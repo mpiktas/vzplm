@@ -191,10 +191,11 @@ print.summary.pgmm <- function(x, digits = max(3, getOption("digits") - 2),
   invisible(x)
 }
 
-fitted.pgmm <- function(object,intercept=c("none","global","individual"),result=c("pseries","pdata.frame"),...) {
+fitted.pgmm <- function(object,forecast=c("onestep","multistep"),output=c("pseries","pdata.frame"),...) {
     
-    intercept <- match.arg(intercept)
-    result <- match.arg(result)
+    forecast <- match.arg(forecast)  
+    output <- match.arg(output)
+ 
     
     if(object$args$model=="twosteps") coeffs <- object$coefficients[[2]]
     else coeffs <- object$coefficients
@@ -209,40 +210,47 @@ fitted.pgmm <- function(object,intercept=c("none","global","individual"),result=
             X <- cbind(x[,-1],matrix(NA,nrow=nrow(x),ncol=notd))
             tdX <- intersect(rownames(x),rownames(td))
             X[tdX,ncoeff-notd:1+1] <- td[tdX,]
+            X <- diff(X)
             crossprod(t(X),coeffs)
         },object$data)
     }
     else {
-        prodXc <- mapply(function(x)crossprod(t(x[,-1]),coeffs),object$data)
+        prodXc <- mapply(function(x)crossprod(t(diff(x[,-1])),coeffs),object$data)
     }
-    if(intercept != "none") {
-        resids <- mapply(function(x,y){
-            y[,1]-x
-        },prodXc,object$data,SIMPLIFY=FALSE)
 
-        if(intercept == "global") {
-            alpha <- mean(Reduce("c",resids),na.rm=TRUE)
-            prodXc <- mapply(function(x)x+alpha,prodXc)
-        }
-        
-        if(intercept == "individual") {
-            prodXc <- mapply(function(x,y){
-                x+mean(y,na.rm=TRUE)
-            },prodXc,resids)
-            alpha <- lapply(resids,mean,na.rm=TRUE)
-        }
+    if(forecast == "onestep") {
+        fit <- mapply(function(x,y){
+            yy <- y[rownames(x),1,drop=FALSE]
+            yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
+            r <- matrix(NA,nrow=nrow(y),ncol=1)
+            rownames(r) <- rownames(y)
+            r[rownames(x),1] <- x+yy
+            r
+        },prodXc,object$data)
     }
-    fit <- ldply(prodXc,function(l)data.frame(time=rownames(l),value=l[,1]))
+    if(forecast == "multistep") {
+        fit <- mapply(function(x,y){
+            yy <- y[rownames(x),1,drop=FALSE]
+            yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
+            rownames(yy) <- rownames(x)
+            xx <- na.omit(x)
+            yy <- yy[rownames(xx),]
+            xx[,1] <- cumsum(xx)+yy[1]
+            r <- matrix(NA,nrow=nrow(y),ncol=1)
+            rownames(r) <- rownames(y)
+            r[rownames(xx),1] <- xx[,1]
+            r
+        },prodXc,object$data)
+    }
+   
+    result <- ldply(fit,function(l)data.frame(time=rownames(l),value=l[,1]))
     
     index <- colnames(object$index)
-    colnames(fit)[1:2] <- index
-    fit <- pdata.frame(fit)
+    colnames(result)[1:2] <- index
+    result <- pdata.frame(result)
     ##Return a pseries object 
 
-    if(result == "pseries") fit <- fit[,3]
+    if(output == "pseries") result <- result[,3]
 
-    if(intercept != "none")
-      list(fitted.values=fit,intercept=alpha)
-    else
-      fit
+    result
 }
