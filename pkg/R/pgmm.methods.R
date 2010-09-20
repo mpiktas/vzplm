@@ -191,12 +191,10 @@ print.summary.pgmm <- function(x, digits = max(3, getOption("digits") - 2),
   invisible(x)
 }
 
-fitted.pgmm <- function(object,forecast=c("onestep","multistep"),output=c("pseries","pdata.frame"),...) {
+fitted.pgmm <- function(object,output=c("pseries","pdata.frame"),...) {
     
-    forecast <- match.arg(forecast)  
     output <- match.arg(output)
- 
-    
+     
     if(object$args$model=="twosteps") coeffs <- object$coefficients[[2]]
     else coeffs <- object$coefficients
     
@@ -218,38 +216,21 @@ fitted.pgmm <- function(object,forecast=c("onestep","multistep"),output=c("pseri
         prodXc <- mapply(function(x)crossprod(t(diff(x[,-1])),coeffs),object$data)
     }
 
-    if(forecast == "onestep") {
-        fit <- mapply(function(x,y){
-            yy <- y[rownames(x),1,drop=FALSE]
-            yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
-            r <- matrix(NA,nrow=nrow(y),ncol=1)
-            rownames(r) <- rownames(y)
-            r[rownames(x),1] <- x+yy
-            r
-        },prodXc,object$data)
-    }
-    if(forecast == "multistep") {
-        fit <- mapply(function(x,y){
-            yy <- y[rownames(x),1,drop=FALSE]
-            yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
-            rownames(yy) <- rownames(x)
-            xx <- na.omit(x)
-            yy <- yy[rownames(xx),]
-            xx[,1] <- cumsum(xx)+yy[1]
-            r <- matrix(NA,nrow=nrow(y),ncol=1)
-            rownames(r) <- rownames(y)
-            r[rownames(xx),1] <- xx[,1]
-            r
-        },prodXc,object$data)
-    }
-   
+    fit <- mapply(function(x,y){
+        yy <- y[rownames(x),1,drop=FALSE]
+        yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
+        r <- matrix(NA,nrow=nrow(y),ncol=1)
+        rownames(r) <- rownames(y)
+        r[rownames(x),1] <- x+yy
+        r
+    },prodXc,object$data)
+    
     result <- ldply(fit,function(l)data.frame(time=rownames(l),value=l[,1]))
     
     index <- colnames(object$index)
     colnames(result)[1:2] <- index
     result <- pdata.frame(result)
-    ##Return a pseries object 
-
+ 
     if(output == "pseries") result <- result[,3]
 
     result
