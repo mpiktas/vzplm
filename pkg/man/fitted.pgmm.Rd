@@ -15,7 +15,7 @@
 
 \method{fitted}{pgmm}(object,output=c("pseries","pdata.frame"),...)
 
-forecast.pgm(object, data, horizon,
+forecast.pgmm(object, data, horizon,
              inverse = function(x)x, 
              output = c("pseries","pdata.frame"),
              index=NULL)
