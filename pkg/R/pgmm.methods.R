@@ -235,3 +235,16 @@ fitted.pgmm <- function(object,output=c("pseries","pdata.frame"),...) {
 
     result
 }
+
+predict.pgmm <- function(object,data,horizon=NULL,
+        inverse=function(x)x,
+        output=c("pseries","pdata.frame"),
+        index=NULL,...) {
+    if(missing(data) | is.null(horizon)) {
+        fitted(object,output=output,...)
+    }
+    else {
+        forecast.pgmm(object,data,horizon,inverse,output,index)
+    }
+    
+}

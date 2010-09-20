@@ -1,29 +1,61 @@
 \name{fitted.pgmm}
 \alias{fitted.pgmm}
-\title{Extract Fitted Values of panel GMM model}
+\alias{predict.pgmm}
+\alias{forecast.pgmm}
+\title{Extract Fitted Values or Predict Dynamic Panel Regression Model}
 
-\description{Extract fitted values of panel GMM model for level equations}
+\description{Extract fitted or predict values based on dynamic panel regression object}
 
 \usage{
-		\method{fitted}{pgmm}(object,intercept=c("none","global","individual"),result=c("pseries","pdata.frame"),...)
+\method{predict}{pgmm}(object,data,
+        horizon=NULL,
+        inverse=function(x)x,
+        output=c("pseries","pdata.frame"),
+        index=NULL,...)
+
+\method{fitted}{pgmm}(object,output=c("pseries","pdata.frame"),...)
+
+forecast.pgm(object, data, horizon,
+             inverse = function(x)x, 
+             output = c("pseries","pdata.frame"),
+             index=NULL)
 }
 
 \arguments{
 		\item{object}{an object of class \code{"pgmm"}}
-		\item{intercept}{the type of intercept for level equation, see Details}
-		\item{result}{how the result is presented. If \code{result="pseries"} the fitted values are returned as a \code{pseries} object with index of data supplied to pgmm. If \code{result="pdata.frame"} then \code{pdata.frame} is returned, with first two columns representing the index of data supplied to pgmm, and the third column the fitted values.}
+		\item{output}{how the result is presented. If \code{output="pseries"} the fitted values are returned as a \code{pseries} object with index of data supplied to pgmm. If \code{output="pdata.frame"} then \code{pdata.frame} is returned, with first two columns representing the index of data supplied to pgmm, and the third column the fitted values.}
+		\item{data}{data frame in which to look for variables with
+          which to predict}
+		\item{horizon}{the time horizon for the forecast. Must be
+		character with values present in pdim attribute of data, when it
+		is transformed to pdata.frame. First and the last values are
+		only considered to form the time horizon without gaps for forecasting}
+		\item{inverse}{if the left-hand side variable is transformed for
+		estimation, the
+		inverse transformation needs to be supplied}
+		\item{index}{the indexes}
 		\item{\dots}{further arguments.}
-
 }
-\value{If \code{intercept="none"}, the result is either object of class \code{pseries} or \code{pdata.frame}, depending on argument \code{result}. If \code{intercept!="none"} then the list is returned with the following elements:	
+\value{pseries or pdata.frame object containing fitted or predicted values}	
 	
-\item{fitted.values}{pseries or pdata.frame object containing the fitted values}
-\item{intercept}{one constant for all individuals, or list of individual constants}
-}
+\details{Method predict acts as a wrapper method. It calls fitted.pgmm if no data is supplied to retrieve fitted values and forecast.pgmm if data is supplied with which to predict.
 
-\details{The fitted values of pgmm object is simply calculated by multiplying the right hand side variables by the estimated coefficients. Since the intercept is not estimated due to differencing used is GMM estimation, three options are presented to deal with this problem.
+Usual procedure for forecasting in the reggression is to use conditional
+expectation. The forecast (or predicted value) of y_t is then
+E(y_t|x_t,x_{t-1},...), where x_t are the left hand side variables of
+level equation. 
 
-If \code{intercept="none"}, the fitted values are left as is. If \code{intercept="global"} it is asumed that we have one constant for all model. It is calculated by taking mean of the residuals. If \code{intercept="individual"}, it is assumed that we have individual constants for each individual. They are estimated as a mean of residuals for each individual. The list containing individual constants is returned.
+Since dynamic panel does not estimate the individual effects, it
+presents the problem how the predicted values should be retrieved. The
+approach taken here is to use difference equation for forecasting. This
+means that instead of predicting y_t we predict y_t-y_{t-1} and get the
+predicted value of y_t by adding actual value of y_{t-1}.
+
+When predicting with new data iterative procedure is used.
+The first iteration produces
+the forecast of y_{t+1} which is used then as a variable in the
+right-hand side for forecasting the value of y_{t+2} and so on.
+		
 }
 
 \author{Vaidotas Zemlys}
@@ -38,16 +70,17 @@ z1 <- pgmm(log(emp) ~ lag(log(emp), 1:2) + lag(log(wage), 0:1)
 
 fz1 <- fitted(z1)
 fz1
-
 femp <- cbind(EmplUK,fz1)
 
 fz1 <- fitted(z1,result = "pdata.frame")
 femp <- merge(EmplUK,fz1)
 
-fz1 <- fitted(z1,result = "pdata.frame",intercept="global")
-fz1$intercept
+##Since we log the variable emp, we need to supply exp as an inverse
+##horizon=as.character(c(1980,1982)) will produce similar results
 
-fz1 <- fitted(z1,result = "pdata.frame",intercept="individual")
-fz1$intercept
+fz1 <- predict(z1,EmplUK,horizon=as.character(1980:1982),inverse=exp,output="pdata.frame")
+
+colnames(fz1)[3] <- "femp"
+femp <- merge(EmplUK,fz1)
 
 }
