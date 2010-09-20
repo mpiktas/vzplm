@@ -77,7 +77,7 @@ lists in case of ``sys--GMM''),}
 
 \item{call}{the call.}
 
-It has \code{print}, \code{summary} and \code{print.summary} methods.
+It has \code{print}, \code{summary}, \code{print.summary}, \code{fitted} and \codet{predict} methods.
 }
 
 \details{
