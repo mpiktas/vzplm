@@ -72,7 +72,7 @@ fz1 <- fitted(z1)
 fz1
 femp <- cbind(EmplUK,fz1)
 
-fz1 <- fitted(z1,result = "pdata.frame")
+fz1 <- fitted(z1,output = "pdata.frame")
 femp <- merge(EmplUK,fz1)
 
 ##Since we log the variable emp, we need to supply exp as an inverse
