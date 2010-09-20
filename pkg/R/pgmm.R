@@ -357,65 +357,94 @@ dynterms <- function(x){
   resu
 }
 
-forecast.pgmm <- function(x,data,start,end,
+forecast.pgmm <- function(object,data,horizon,
                           inverse = function(x)x,
-                          output = c("pseries","pdata.frame")
-                          ) {
-
-   
+                          output = c("pseries","pdata.frame"),
+                          index=NULL
+                          ) {   
     output <- match.arg(output)
     
-    mf <- match.call(expand.dots = FALSE)
+    mf <- match.call(expand.dots = TRUE)
     m <- match(c("formula", "data", "subset", "na.action", "index"),names(mf),0)
     mf <- mf[c(1,m)]
     mf$drop.unused.levels <- TRUE
     mf[[1]] <- as.name("plm")
     mf$model <- NA
-    mf$formula <- formula(x$level.form)
+    mf$formula <- formula(object$level.form)
     mf$na.action <- "na.pass"
     mf$data <- as.name("newdata")
+    mf$index <- eval(expression(index),list(index=index))
+    
+    #Format the data as pdata.frame   
+    if (inherits(data, "pdata.frame") && !is.null(index)) 
+        warning("the index argument is ignored because data is a pdata.frame")
+    if (!inherits(data, "pdata.frame")) 
+        data <- pdata.frame(data, index)
 
-    endoname <- all.vars(x$level.form[[2]])
+    index <- attr(data, "index")
+    pdim <- pdim(data)
+    pdim.model <- attr(object,"pdim")
+    time <- pdim$panel.names$time.names
 
+    #Check for non-existant times
+    horizon <- factor(horizon,levels=pdim$panel.names$time.names)    
+    if(sum(is.na(horizon))>0)
+      stop("The forecast horizon containts times not present in supplied data")
+    
+    #Make horizon continuous
+    start <- which(time == horizon[1])
+    end <- which(time == horizon[length(horizon)])
+    if(end<start) stop("The end of forecast horizon is earlier than the start")
+    horizon <- time[start:end]
+    
+    endoname <- all.vars(object$level.form[[2]])
     if(!(endoname %in% colnames(data))) {
-        endoname <- as.character(x$level.form[[2]])
+        endoname <- as.character(object$level.form[[2]])
         if(!endoname %in% colnames(data)) 
         stop("Endogenous variable is not present in data set")
     }
 
-    ###Rearange original data. It is necessary for time parameter to be
-    indn <- colnames(x$index)
-    data <- data[,c(indn,colnames(data)[! colnames(data) %in% indn])]
-    data[,2] <- as.numeric(data[,2])
-    data <- data[order(data[,1],data[,2]),]
-  
+    if(object$args$model=="twosteps") coeffs <- object$coefficients[[2]]
+    else coeffs <- object$coefficients
     
-    if(x$args$model=="twosteps") coeffs <- x$coefficients[[2]]
-    else coeffs <- x$coefficients
+    combined.time <- factor(sort(unique(c(pdim.model$panel.names$time.names,pdim$panel.names$time.names))))   
+   
+    #We need to guard against the case, when periods with time.dummies    #coefficients are not present in forecast horizon. We supply
+    #zeroes in that case.
+
     
-    min.time <- min(as.numeric(attr(x,"pdim")$panel.names$time.names))
-    
-    if(x$args$effect=="twoways") {
-        notd <- length(x$arg$namest)
+    if(object$args$effect=="twoways") {
+        notd <- length(object$arg$namest)
         ncoeff <- length(coeffs)
         td <- diag(1,notd)
-        rownames(td) <- x$arg$namest
+        rownames(td) <- object$arg$namest
 
-        zerotd <- matrix(0,ncol=notd,nrow=length(min.year:end))
-        rownames(zerotd) <- as.character(min.time:end)
-        colnames(zerotd) <- notd
+        zerotd <- matrix(0,ncol=notd,nrow=length(combined.time))
+        rownames(zerotd) <- levels(combined.time)
+        colnames(zerotd) <- colnames(td)
         zerotd[rownames(td),] <- td
         td <- zerotd
     }    
+  
     
-    max.lag <- max(sapply(dynterms(x$level.form),max))+1
-    for(cy in start:end) {
-        fdata <- eval(mf, list(newdata=
-                               data[data[, 2] >= cy - max.lag & data[, 2] <= cy,]))
-        attr(fdata,"formula") <- formula(x$level.form)
-        yX <- extract.data(fdata)
+    max.lag <- max(sapply(dynterms(object$level.form),max))+1
+    time <- pdim$panel.names$time.names
+    time.column <- colnames(index)[2]
+  
+    for(i in start:end) {
 
-        if(x$args$effect=="twoways") {
+        et <- time[(i-max.lag):i]
+
+        #supply data.frame, since error is produced otherwise, due
+        #to rownames being non-numeric. This is either bug or feature
+        #in model.frame.pFormula and plm.
+        
+        fdata <- eval(mf, list(newdata=as.data.frame(data[data[, time.column]%in% et ,])))
+            
+        attr(fdata,"formula") <- formula(object$level.form)
+        yX <- extract.data(fdata)
+      
+        if(object$args$effect=="twoways") {
             prodXc <- mapply(function(x) {
                 X <- cbind(x[,-1],matrix(NA,nrow=nrow(x),ncol=notd))
                 tdX <- intersect(rownames(x),rownames(td))
@@ -435,14 +464,13 @@ forecast.pgmm <- function(x,data,start,end,
 
        
         fit <- ldply(fit,function(l)data.frame(time=rownames(l),value=l))
-        fit <- fit[fit[,2]==cy,]        
+        fit <- fit[fit[,2]==time[i],]        
         
-        data[data[,2]==cy, endoname] <- inverse(fit[,3])
+        data[data[,time.column]==time[i], endoname] <- inverse(fit[,3])
     }
 
-    result <- data[,c(colnames(x$index),endoname)]
-    result <- result[result[,2]>=start & result[,2]<=end,]
-    result <- pdata.frame(result)
+    result <- data[,c(colnames(index),endoname)]
+    result <- result[result[,2] %in% horizon,]
 
     if(output == "pseries") result <- result[,3]
 
