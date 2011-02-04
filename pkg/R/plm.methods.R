@@ -79,7 +79,7 @@ print.summary.plm <- function(x,digits= max(3, getOption("digits") - 2),
   invisible(x)
 }
 
-fitted.plm <- function(object, model = NULL, ...){
+fitted.plm <- function(object, model = NULL,output=c("pseries","pdata.frame"),...){
   # there are two 'models' used ; the fitted model and the
   # transformation used for the fitted values
   fittedmodel <- describe(object, "model")
@@ -118,22 +118,31 @@ fitted.plm <- function(object, model = NULL, ...){
   else{
     fv <- as.numeric(crossprod(t(X), beta))
   }
+  fv<-data.frame(attributes(object$model)$index,value=fv)
+  fv<-pdata.frame(fv)
+  if(output=="pseries")fv<-fv[,"value"]
   fv
 }
 
   
-predict.plm <- function(object, newdata = NULL, ...){
+predict.plm <- function(object, newdata = NULL,horizon=NULL,
+                        inverse=function(x)x,
+                        output=c("pseries","pdata.frame"),
+                        index=NULL,...){
   tt <- terms(object)
-  if (is.null(newdata)){
-    result <- fitted(object, ...)
+  result<-if (is.null(newdata) | is.null(horizon)){
+    fitted(object,output=output, ...)
   }
-  else{
-    Terms <- delete.response(tt)
-    m <- model.frame(Terms, newdata)
-    X <- model.matrix(Terms, m)
-    beta <- coef(object)
-    result <- as.numeric(crossprod(beta, t(X)))
-  }
+  #else{
+  #  Terms <- delete.response(tt)
+  #  m <- model.frame(Terms, newdata)
+  #  X <- model.matrix(Terms, m)
+  #  beta <- coef(object)
+  #  result <- as.numeric(crossprod(beta, t(X)))
+  #}
+ # else{
+   # forecast.plm(object,newdata,horizon,inverse,output,index)
+ # }
   result
 }
 
@@ -228,3 +237,109 @@ describe <- function(x,
          
   
   
+forecast.pooling<-function(object,newdata,horizon,
+                       inverse=function(x)x,
+                       output=c("pseries","pdata.frame"),
+                       index=NULL){
+
+    output <- match.arg(output)
+  
+    mf <- match.call(expand.dots = TRUE)
+    m <- match(c("formula", "data", "subset", "na.action", "index"),names(mf),0)
+    mf <- mf[c(1,m)]
+    mf$drop.unused.levels <- TRUE
+    mf[[1]] <- as.name("plm")
+    mf$model <- NA
+    mf$formula <- formula(object$formula)
+    mf$na.action <- "na.pass"
+    mf$data <- as.name("newdata")
+    mf$index <- eval(expression(index),list(index=index))
+
+    #Format the data as pdata.frame   
+    if (inherits(newdata, "pdata.frame") && !is.null(index)) 
+        warning("the index argument is ignored because data is a pdata.frame")
+    if (!inherits(newdata, "pdata.frame")) 
+        newdata <- pdata.frame(newdata, index)
+
+    index <- attr(newdata, "index")
+    pdim <- pdim(newdata)
+    pdim.model <- attr(object,"pdim")
+    time <- pdim$panel.names$time.names
+
+    #Check for non-existant times
+    horizon <- factor(horizon,levels=pdim$panel.names$time.names)    
+    if(sum(is.na(horizon))>0)
+      stop("The forecast horizon containts times not present in supplied data")
+    
+    #Make horizon continuous
+    start <- which(time == horizon[1])
+    end <- which(time == horizon[length(horizon)])
+    if(end<start) stop("The end of forecast horizon is earlier than the start")
+    horizon <- time[start:end]
+    #######
+    max.lag <- max(sapply(dynterms(object$formula),max))+1
+    time <- pdim$panel.names$time.names
+    time.column <- colnames(index)[2]
+
+    #Identifying if the set of explantory variables have a lagged dependent
+    #variable
+    
+    lagged.var<-names(which(mapply(function(x)x>0,dynterms(object))==TRUE))
+    endoname <- all.vars(object$formula[[2]])
+    lagged.endo<-length(grep(endoname,lagged.var))>0
+
+  
+
+    i<-start
+    while(i<=end){
+      
+      et <-if(!lagged.endo)  time[(start-max.lag):end]
+      else time[(i-max.lag):(i+1)]
+
+      fdata <- eval(mf, list(newdata=as.data.frame(newdata[newdata[,time.column]%in%et])))
+      attr(fdata,"formula") <- formula(object$formula)
+      yX <- extract.data(fdata)
+      coeffs<-coef(object)
+      intercept<-has.intercept(object$formula)
+      if(intercept)yX<- mapply(function(x){
+                                 x<-cbind(x,rep(1,dim(x)[1]))
+                                 colnames(x)[dim(x)[2]]<-"(Intercept)"
+                                 temp<-colnames(x)[-c(1,dim(x)[2])]
+                                 x<-cbind(x[,c(1,dim(x)[2])],x[,-c(1,dim(x)[2])])
+                                 colnames(x)[-c(1,2)]<-temp
+                                 x
+                               },
+                              yX,SIMPLIFY=FALSE)  
+      prodXc <- mapply(function(x)crossprod(t(x[,-1]),coeffs),
+                     yX,SIMPLIFY=FALSE)
+      if(!levels){
+
+
+      fit <- mapply(function(x,y){
+                                  yy <- y[rownames(x),1,drop=FALSE]
+                                  yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
+                                  x+yy
+                                 },prodXc,yX,SIMPLIFY=FALSE)
+      }
+      fit <- ldply(fit,function(l)data.frame(time=rownames(l),l))
+
+      
+      
+      if(!lagged.endo){
+        newdata[newdata[,time.column]%in%horizon, endoname] <- inverse(fit[fit[,"time"]%in%horizon,3])
+        i<-end+1
+      }
+      else{
+        fit <- fit[fit[,2]==time[i],]
+        newdata[newdata[,time.column]==time[i], endoname] <- inverse(fit[,3])
+        i<-i+1
+      }
+    }
+   
+    result <- newdata[,c(colnames(index),endoname)]
+    result <- result[result[,2] %in% horizon,]
+
+    if(output == "pseries") result <- result[,3]
+
+    result
+}
