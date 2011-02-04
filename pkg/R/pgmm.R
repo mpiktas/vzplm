@@ -113,11 +113,15 @@ pgmm <- function(formula, data, subset, na.action,
   
   # Get the covariates matrix, split it by individual 
   attr(data, "formula") <- formula(main.form)
+  
   yX <- extract.data(data)
+  
+  datayX <- yX
   names.coef <- colnames(yX[[1]])[-1]
   # Get a list of missing time series for each individual : nats is a
   # list of two dimentional vectors containing the number of time
   # series lost at the begining and at the end of the series
+ 
   rn <- lapply(yX, rownames)
   allrn <- levels(attr(data, "index")[[2]])
   nats <- lapply(rn,
@@ -142,9 +146,10 @@ pgmm <- function(formula, data, subset, na.action,
     inst <- mapply(function(x, y){ attr(x, "nats") <- y;x}, inst, nats, SIMPLIFY=FALSE)
   yX <- mapply(function(x, y){ attr(x, "nats") <- y;x}, yX, nats, SIMPLIFY=FALSE)
   # Create the matrix of time dummies.
-  namest <- levels(attr(data, "index")[,2])
+  namest <- NULL
   if (effect == "twoways"){
-    if (transformation == "ld"){
+      namest <- levels(attr(data, "index")[,2])
+      if (transformation == "ld"){
       td <- cbind(1, rbind(0, diag(1, T - 1)))
       # remove as many columns and row as there are lost time series
       # in level (the difference of position between rows and columns
@@ -341,6 +346,7 @@ pgmm <- function(formula, data, subset, na.action,
                  fitted.values = fitted.values,
                  df.residual = df.residual, 
                  model = yX, W = W, A1 = A1, A2 = A2,
+                 data = datayX, index = index, level.form = main.form,
                  call = cl, args = args)
   result <- structure(result, class = c("pgmm", "panelmodel"),
                       pdim = pdim)
@@ -362,6 +368,125 @@ dynterms <- function(x){
   resu
 }
 
+forecast.pgmm <- function(object,data,horizon,
+                          inverse = function(x)x,
+                          output = c("pseries","pdata.frame"),
+                          index=NULL
+                          ) {   
+    output <- match.arg(output)
+    
+    mf <- match.call(expand.dots = TRUE)
+    m <- match(c("formula", "data", "subset", "na.action", "index"),names(mf),0)
+    mf <- mf[c(1,m)]
+    mf$drop.unused.levels <- TRUE
+    mf[[1]] <- as.name("plm")
+    mf$model <- NA
+    mf$formula <- formula(object$level.form)
+    mf$na.action <- "na.pass"
+    mf$data <- as.name("newdata")
+    mf$index <- eval(expression(index),list(index=index))
+    
+    #Format the data as pdata.frame   
+    if (inherits(data, "pdata.frame") && !is.null(index)) 
+        warning("the index argument is ignored because data is a pdata.frame")
+    if (!inherits(data, "pdata.frame")) 
+        data <- pdata.frame(data, index)
+
+    index <- attr(data, "index")
+    pdim <- pdim(data)
+    pdim.model <- attr(object,"pdim")
+    time <- pdim$panel.names$time.names
+
+    #Check for non-existant times
+    horizon <- factor(horizon,levels=pdim$panel.names$time.names)    
+    if(sum(is.na(horizon))>0)
+      stop("The forecast horizon containts times not present in supplied data")
+    
+    #Make horizon continuous
+    start <- which(time == horizon[1])
+    end <- which(time == horizon[length(horizon)])
+    if(end<start) stop("The end of forecast horizon is earlier than the start")
+    horizon <- time[start:end]
+    
+    endoname <- all.vars(object$level.form[[2]])
+    if(!(endoname %in% colnames(data))) {
+        endoname <- as.character(object$level.form[[2]])
+        if(!endoname %in% colnames(data)) 
+        stop("Endogenous variable is not present in data set")
+    }
+
+    if(object$args$model=="twosteps") coeffs <- object$coefficients[[2]]
+    else coeffs <- object$coefficients
+    
+    combined.time <- factor(sort(unique(c(pdim.model$panel.names$time.names,pdim$panel.names$time.names))))   
+   
+    #We need to guard against the case, when periods with time.dummies    #coefficients are not present in forecast horizon. We supply
+    #zeroes in that case.
+
+    
+    if(object$args$effect=="twoways") {
+        notd <- length(object$arg$namest)
+        ncoeff <- length(coeffs)
+        td <- diag(1,notd)
+        rownames(td) <- object$arg$namest
+
+        zerotd <- matrix(0,ncol=notd,nrow=length(combined.time))
+        rownames(zerotd) <- levels(combined.time)
+        colnames(zerotd) <- colnames(td)
+        zerotd[rownames(td),] <- td
+        td <- zerotd
+    }    
+  
+    
+    max.lag <- max(sapply(dynterms(object$level.form),max))+1
+    time <- pdim$panel.names$time.names
+    time.column <- colnames(index)[2]
+  
+    for(i in start:end) {
+
+        et <- time[(i-max.lag):i]
+
+        #supply data.frame, since error is produced otherwise, due
+        #to rownames being non-numeric. This is either bug or feature
+        #in model.frame.pFormula and plm.
+        
+        fdata <- eval(mf, list(newdata=as.data.frame(data[data[, time.column]%in% et ,])))
+            
+        attr(fdata,"formula") <- formula(object$level.form)
+        yX <- extract.data(fdata)
+      
+        if(object$args$effect=="twoways") {
+            prodXc <- mapply(function(x) {
+                X <- cbind(x[,-1],matrix(NA,nrow=nrow(x),ncol=notd))
+                tdX <- intersect(rownames(x),rownames(td))
+                X[tdX,ncoeff-notd:1+1] <- td[tdX,]
+                crossprod(t(diff(X)),coeffs)
+            },yX,SIMPLIFY=FALSE)
+        }
+        else {
+            prodXc <- mapply(function(x)crossprod(t(diff(x[,-1])),coeffs),yX,SIMPLIFY=FALSE)
+        }
+        
+        fit <- mapply(function(x,y){
+            yy <- y[rownames(x),1,drop=FALSE]
+            yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
+            x+yy
+        },prodXc,yX,SIMPLIFY=FALSE)
+
+       
+        fit <- ldply(fit,function(l)data.frame(time=rownames(l),value=l))
+        fit <- fit[fit[,2]==time[i],]        
+        
+        data[data[,time.column]==time[i], endoname] <- inverse(fit[,3])
+    }
+
+    result <- data[,c(colnames(index),endoname)]
+    result <- result[result[,2] %in% horizon,]
+
+    if(output == "pseries") result <- result[,3]
+
+    result
+}
 
 getvar <- function(x){
   x <- as.list(x)

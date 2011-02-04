@@ -69,9 +69,15 @@ lists in case of ``sys--GMM''),}
 
 \item{A2}{the weighting matrix for the two--steps estimator,}
 
+\item{data}{a list containing the variables corresponding to level equations}
+
+\item{index}{an index of pdata.frame used in the model}
+
+\item{level.form}{formula corresponding to level equation}
+
 \item{call}{the call.}
 
-It has \code{print}, \code{summary} and \code{print.summary} methods.
+It has \code{print}, \code{summary}, \code{print.summary}, \code{fitted} and \code{predict} methods.
 }
 
 \details{

@@ -193,3 +193,61 @@ print.summary.pgmm <- function(x, digits = max(3, getOption("digits") - 2),
   }
   invisible(x)
 }
+
+fitted.pgmm <- function(object,output=c("pseries","pdata.frame"),...) {
+    
+    output <- match.arg(output)
+     
+    if(object$args$model=="twosteps") coeffs <- object$coefficients[[2]]
+    else coeffs <- object$coefficients
+    
+    if(object$args$effect=="twoways") {
+        notd <- length(object$arg$namest)
+        ncoeff <- length(coeffs)
+        td <- diag(1,notd)
+        rownames(td) <- object$arg$namest
+        
+        prodXc <- mapply(function(x) {
+            X <- cbind(x[,-1],matrix(NA,nrow=nrow(x),ncol=notd))
+            tdX <- intersect(rownames(x),rownames(td))
+            X[tdX,ncoeff-notd:1+1] <- td[tdX,]
+            X <- diff(X)
+            crossprod(t(X),coeffs)
+        },object$data)
+    }
+    else {
+        prodXc <- mapply(function(x)crossprod(t(diff(x[,-1])),coeffs),object$data)
+    }
+
+    fit <- mapply(function(x,y){
+        yy <- y[rownames(x),1,drop=FALSE]
+        yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
+        r <- matrix(NA,nrow=nrow(y),ncol=1)
+        rownames(r) <- rownames(y)
+        r[rownames(x),1] <- x+yy
+        r
+    },prodXc,object$data)
+    
+    result <- ldply(fit,function(l)data.frame(time=rownames(l),value=l[,1]))
+    
+    index <- colnames(object$index)
+    colnames(result)[1:2] <- index
+    result <- pdata.frame(result)
+ 
+    if(output == "pseries") result <- result[,3]
+
+    result
+}
+
+predict.pgmm <- function(object,data,horizon=NULL,
+        inverse=function(x)x,
+        output=c("pseries","pdata.frame"),
+        index=NULL,...) {
+    if(missing(data) | is.null(horizon)) {
+        fitted(object,output=output,...)
+    }
+    else {
+        forecast.pgmm(object,data,horizon,inverse,output,index)
+    }
+    
+}
