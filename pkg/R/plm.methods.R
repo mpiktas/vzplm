@@ -159,6 +159,7 @@ tss.default <- function(x){
   var(x)*(length(x)-1)
 }
 
+#check
 tss.plm <- function(x, model = NULL){
   if (is.null(model)) model <- describe(x, "model")
   effect <- describe(x, "effect")
