@@ -240,6 +240,7 @@ describe <- function(x,
 forecast.pooling<-function(object,newdata,horizon,
                        inverse=function(x)x,
                        output=c("pseries","pdata.frame"),
+                       levels=FALSE,    
                        index=NULL){
 
     output <- match.arg(output)
@@ -287,14 +288,14 @@ forecast.pooling<-function(object,newdata,horizon,
     lagged.var<-names(which(mapply(function(x)x>0,dynterms(object))==TRUE))
     endoname <- all.vars(object$formula[[2]])
     lagged.endo<-length(grep(endoname,lagged.var))>0
-
-  
+    endo<-strsplit(as.character(object$formula),"~")[[2]]
+    diff.endo<-length(grep("diff",endo))>0
 
     i<-start
     while(i<=end){
       
-      et <-if(!lagged.endo)  time[(start-max.lag):end]
-      else time[(i-max.lag):(i+1)]
+      et <-if(lagged.endo|diff.endo)time[(i-max.lag):(i+1)] 
+      else time[(start-max.lag):end]
 
       fdata <- eval(mf, list(newdata=as.data.frame(newdata[newdata[,time.column]%in%et])))
       attr(fdata,"formula") <- formula(object$formula)
@@ -312,31 +313,43 @@ forecast.pooling<-function(object,newdata,horizon,
                               yX,SIMPLIFY=FALSE)  
       prodXc <- mapply(function(x)crossprod(t(x[,-1]),coeffs),
                      yX,SIMPLIFY=FALSE)
-      if(!levels){
-
-
-      fit <- mapply(function(x,y){
-                                  yy <- y[rownames(x),1,drop=FALSE]
+      if(diff.endo){
+        data.split <- split(as.data.frame(newdata), index[[1]])
+        time.split <- split(index[[2]], index[[1]])
+        data.split <- mapply(
+                 function(x, y){
+                   rownames(x) <- y
+                   x
+                 }
+                 , data.split, time.split, SIMPLIFY = FALSE)
+      
+      
+        fit <- mapply(function(x,y){
+                                  yy <- y[rownames(x),endoname,drop=FALSE]
                                   yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
-                                  x+yy
-                                 },prodXc,yX,SIMPLIFY=FALSE)
+                                  z<-x+yy
+                                  rownames(z)<-rownames(x)
+                                  z
+                                 },prodXc,data.split,SIMPLIFY=FALSE)
       }
+      else fit<-prodXc
       fit <- ldply(fit,function(l)data.frame(time=rownames(l),l))
 
-      
-      
-      if(!lagged.endo){
-        newdata[newdata[,time.column]%in%horizon, endoname] <- inverse(fit[fit[,"time"]%in%horizon,3])
-        i<-end+1
+      if(lagged.endo|diff.endo){
+        fit <- fit[fit[,2]==time[i],]
+        newdata[newdata[,time.column]==time[i], endoname] <- if(diff.endo)
+          fit[,3]
+        else inverse(fit[,3])
+        i<-i+1
       }
       else{
-        fit <- fit[fit[,2]==time[i],]
-        newdata[newdata[,time.column]==time[i], endoname] <- inverse(fit[,3])
-        i<-i+1
+        newdata[newdata[,time.column]%in%horizon, endoname] <- inverse(fit[fit[,"time"]%in%horizon,3])
+        i<-end+1
       }
     }
    
     result <- newdata[,c(colnames(index),endoname)]
+    if(!levels) result[,endoname]<-diff(result[,endoname])
     result <- result[result[,2] %in% horizon,]
 
     if(output == "pseries") result <- result[,3]
