@@ -421,26 +421,38 @@ forecast.within<-function(object,newdata,horizon,
     i<-start
     while(i<=end){
       
-      et <-if(lagged.endo|diff.endo)time[(i-max.lag):(i+1)] 
+      et <-if(lagged.endo)time[(i-max.lag):(i)]#+1)] 
       else time[(start-max.lag):end]
 
       fdata <- eval(mf, list(newdata=as.data.frame(newdata[newdata[,time.column]%in%et])))
       attr(fdata,"formula") <- formula(object$formula)
+      
       yX <- extract.data(fdata)
+      #if(lagged.endo){
+       # old.data<-cbind(attributes(object$model)$index,object$model)
+        #index.old<-attr(object$model,"index")
+        #colnames(old.data)[-c(1,2)]<-colnames(object$model)
+        #old.split <- split(as.data.frame(old.data), index.old[[1]])
+        #time.split.old <- split(index.old[[2]], index.old[[1]])
+        #old.split <- mapply(
+         #        function(x, y){
+          #         rownames(x) <- y
+           #        x
+            #     }
+             #    , old.split, time.split.old, SIMPLIFY = FALSE)
+        # DATA<-mapply(function(x,y){
+         #                         z<-rbind(y[,colnames(x)],x[dim(x)[1],])
+          #                        z[dim(z)[1],1]<- z[(dim(z)[1]-1),1]
+           #                       z[dim(z)[1],2]<- as.character(as.numeric(z[(dim(z)[1]-1),2])+1)
+            #                      rownames(z)[dim(z)[1]]<-as.character(z[dim(z)[1]-1,2]+1)
+             #                     z
+              #                   },yX,old.split,SIMPLIFY=FALSE)
+
+      #}  
       if(model=="within") yX <- trans.within(yX,fdata,effect,time.column)
       coeffs<-if((effect=="twoways"|effect=="time")& model!="within")c(coef(object),fixef(object,effect="time"))
       else coef(object)
-      #intercept<-has.intercept(object$formula)
-      #if(intercept)yX<- mapply(function(x){
-       #                          x<-cbind(x,rep(1,dim(x)[1]))
-        #                         colnames(x)[dim(x)[2]]<-"(Intercept)"
-         #                        temp<-colnames(x)[-c(1,dim(x)[2])]
-          #                       x<-cbind(x[,c(1,dim(x)[2])],x[,-c(1,dim(x)[2])])
-       #                          colnames(x)[-c(1,2)]<-temp
-        #                         x
-         #                      },
-          #                    yX,SIMPLIFY=FALSE)
-       
+    
       if((effect=="twoways"|effect=="time")& model!="within") {
             combined.time <- factor(sort(unique(c(names(fixef(object,effect="time"))),pdim(newdata)$panel.names$time.names)))  
             notd <- length(names(fixef(object,effect="time")))
@@ -472,42 +484,49 @@ forecast.within<-function(object,newdata,horizon,
                            }else fit<-prodXc
 
       }  else fit<-prodXc
-      if(diff.endo){
-        data.split <- split(as.data.frame(newdata), index[[1]])
-        time.split <- split(index[[2]], index[[1]])
-        data.split <- mapply(
-                 function(x, y){
-                   rownames(x) <- y
-                   x
-                 }
-                 , data.split, time.split, SIMPLIFY = FALSE)
       
-      
-        fit <- mapply(function(x,y){
-                                  yy <- y[rownames(x),endoname,drop=FALSE]
-                                  yy <- rbind(NA,yy[-nrow(yy),1,drop=FALSE])
-                                  z<-x+yy
-                                  rownames(z)<-rownames(x)
-                                  z
-                                 },fit,data.split,SIMPLIFY=FALSE)
-      }
       fit <- ldply(fit,function(l)data.frame(time=rownames(l),l))
 
-      if(lagged.endo|diff.endo){
+     if(lagged.endo){
         fit <- fit[fit[,2]==time[i],]
-        newdata[newdata[,time.column]==time[i], endoname] <- if(diff.endo)
-          fit[,3]
-        else inverse(fit[,3])
-        i<-i+1
+        if(diff.endo){
+          newdata[newdata[,time.column]==time[i], endoname] <-  newdata[newdata[,time.column]==time[i-1], endoname] + inverse(fit[,3])
+        }
+        else
+          newdata[newdata[,time.column]==time[i], endoname] <- inverse(fit[,3])
+          i<-i+1
       }
       else{
         newdata[newdata[,time.column]%in%horizon, endoname] <- inverse(fit[fit[,"time"]%in%horizon,3])
         i<-end+1
       }
     }
-   
+  
+    if(levels & diff.endo & model!="within" & !lagged.endo){
+       data.split <- split(as.data.frame(newdata), index[[1]])
+       time.split <- split(index[[2]], index[[1]])
+       data.split <- mapply(
+                 function(x, y){
+                   rownames(x) <- y
+                   x
+                 }
+                 , data.split, time.split, SIMPLIFY = FALSE)
+       
+      data.split <- mapply(function(x){
+                                   first <- which(x[,time.column]%in%horizon[1]) - 1
+                                   start.endo <-x[first,endoname]
+                                   y<-x
+                                   for(i in 1:length(horizon)){
+                                      temp<-x[x[,time.column]%in%horizon[i],endoname]
+                                     y[y[,time.column]%in%horizon[i],endoname]<-if(horizon[i]==horizon[1])start.endo + temp 
+                                         else y[y[,time.column]%in%horizon[i-1],endoname]+temp 
+                                   }
+                                   y
+                                 },data.split,SIMPLIFY=FALSE)
+       newdata<-ldply(data.split,function(l)data.frame(time=rownames(l),l))
+    }
     result <- newdata[,c(colnames(index),endoname)]
-    if(!levels&diff.endo) result[,endoname]<-diff(result[,endoname])
+    if(lagged.endo & diff.endo) result[,endoname]<- diff(result[,endoname])
     result <- result[result[,2] %in% horizon,]
 
     if(output == "pseries") result <- result[,3]
@@ -517,11 +536,11 @@ forecast.within<-function(object,newdata,horizon,
 
 trans.within<-function(X1,X2,effect,time.column){
   X2<-cbind(attributes(X2)$index,as.data.frame(X2))
-  time.mean<-aggregate(X2[,-c(1,2)],by=list(X2[,time.column]),mean)
-  var.mean<-matrix(apply(X2[,-c(1,2)],2,mean),ncol=dim(X2)[2]-2)
+  time.mean<-aggregate(X2[,-c(1,2)],by=list(X2[,time.column]),function(l)mean(l,na.rm=TRUE))
+  var.mean<-matrix(apply(X2[,-c(1,2)],2,function(l)mean(l,na.rm=TRUE)),ncol=dim(X2)[2]-2)
   res <- switch(effect,
                 individual=mapply(function(x){
-                             apply(x,2,function(l)l-mean(l))
+                             apply(x,2,function(l)l-mean(l,na.rm=TRUE))
                            },X1,SIMPLIFY=FALSE),
                 time=mapply(function(x){
                              y<-as.matrix(x-time.mean[,-1])
@@ -529,7 +548,7 @@ trans.within<-function(X1,X2,effect,time.column){
                              y
                      },X1,SIMPLIFY=FALSE),
                 twoways=mapply(function(x){
-                             y<-apply(x,2,function(l)l-mean(l))
+                             y<-apply(x,2,function(l)l-mean(l,na.rm=TRUE))
                              y<-y-time.mean[,-1]
                              z<-as.matrix(y+apply(var.mean,2,function(l)rep(l,dim(y)[1])))
                              rownames(z)<-rownames(x)
