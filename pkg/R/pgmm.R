@@ -499,8 +499,8 @@ getvar <- function(x){
     else{
 #      inspar <- substr(y, deb + 2, nchar(y) - 1)
 #      inspar <- substr(y, deb + 4, nchar(y) - 1) # does not work with the object something like this: ~ function(lag(var,k))
-      k<-as.numeric(gregexpr(")", y)[[1]])[1]
-      inspar <- substr(y, deb + 4, k - 1)
+      k<- expr.in.lag(y,deb)
+      inspar <- substr(y, deb + 4, k)
       coma <- as.numeric(gregexpr(",", inspar)[[1]][1])
       if (coma == -1){
         endvar <- nchar(inspar)
@@ -618,3 +618,12 @@ FSM <- function(t,fsm){
          )
 }
 
+expr.in.lag<-function(y,deb){
+  y<-substr(y,deb,nchar(y))
+  left<-gregexpr("\\(", y)[[1]]
+  right<- gregexpr(")", y)[[1]]
+  k<-if(length(left)==length(right)) right[length(right)]-1
+     else right[length(left)]-1
+  k<-k+deb-1
+  k
+}
