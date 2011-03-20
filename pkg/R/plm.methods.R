@@ -140,9 +140,8 @@ predict.plm <- function(object, newdata = NULL,horizon=NULL,
   #  beta <- coef(object)
   #  result <- as.numeric(crossprod(beta, t(X)))
   #}
- # else{
-   # forecast.plm(object,newdata,horizon,inverse,output,index)
- # }
+  else
+    forecast(object,newdata,horizon,inverse,output,index,...)
   result
 }
 
@@ -236,16 +235,17 @@ describe <- function(x,
          )
 }
          
-  
-  
-forecast.pooling<-function(object,newdata,horizon,
+
+forecast.plm<-function(object,newdata,horizon,
                        inverse=function(x)x,
                        output=c("pseries","pdata.frame"),
-                       levels=FALSE,    
-                       index=NULL){
+                       index=NULL,...){
 
+    levels<-if(is.null(list(...)[["levels"]]))FALSE else list(...)[["levels"]]
     output <- match.arg(output)
-  
+    effect<-describe(object,"effect")
+    fittedmodel<-describe(object,"model")
+    
     mf <- match.call(expand.dots = TRUE)
     m <- match(c("formula", "data", "subset", "na.action", "index"),names(mf),0)
     mf <- mf[c(1,m)]
@@ -279,7 +279,7 @@ forecast.pooling<-function(object,newdata,horizon,
     if(end<start) stop("The end of forecast horizon is earlier than the start")
     horizon <- time[start:end]
     #######
-    max.lag <- max(sapply(dynterms(object$formula),max))#+1
+    max.lag <- max(sapply(dynterms(object$formula),max))+1
     time <- pdim$panel.names$time.names
     time.column <- colnames(index)[2]
 
@@ -292,8 +292,51 @@ forecast.pooling<-function(object,newdata,horizon,
     endo<-strsplit(as.character(object$formula),"~")[[2]]
     diff.endo<-length(grep("diff",endo))>0
 
-    i<-start
-    while(i<=end){
+    model<-if(is.null(list(...)[["model"]]))"pooling" else list(...)[["model"]]
+ 
+     
+
+    #the list with model parameters
+
+    MODEL<-list(lagged.endo=lagged.endo,diff.endo=diff.endo,endoname=endoname,start=start,end=end,max.lag=max.lag,time=time,mf=mf,time.column=time.column,levels=levels,effect=effect,model=model)
+    
+    RESULTS<-switch(fittedmodel,
+                    pooling=forecast.pooling(object,newdata,horizon,
+                                             inverse,output,index,MODEL),
+                    within=forecast.within(object,newdata,horizon,
+                                             inverse,output,index,MODEL),
+                    random=if(model=="random")forecast.random(object,newdata,horizon,inverse,output,index,MODEL) else forecast.pooling(object,newdata,horizon,inverse,output,index,MODEL)
+   
+                    )
+    RESULTS
+
+
+}  
+
+
+  
+forecast.pooling<-function(object,newdata,horizon,
+                       inverse=function(x)x,
+                       output=c("pseries","pdata.frame"),
+                       index=NULL,MODEL){
+
+      lagged.endo<-MODEL$lagged.endo
+      diff.endo<-MODEL$diff.endo
+      endoname<-MODEL$endoname
+      start<-MODEL$start
+      end<-MODEL$end
+      max.lag<-MODEL$max.lag
+      time<-MODEL$time
+      mf<-MODEL$mf
+      time.column<-MODEL$time.column
+      levels<-MODEL$levels
+  
+      if(lagged.endo) FIT<-NULL
+      coeffs<-coef(object)
+      intercept<-has.intercept(object$formula)
+
+      i<-start
+      while(i<=end){
       
       et <-if(lagged.endo)time[1:(i)]#+1)]i-max.lag 
            else time[(start-max.lag):end]
@@ -301,8 +344,6 @@ forecast.pooling<-function(object,newdata,horizon,
       fdata <- eval(mf, list(newdata=as.data.frame(newdata[newdata[,time.column]%in%et])))
       attr(fdata,"formula") <- formula(object$formula)
       yX <- extract.data(fdata)
-      coeffs<-coef(object)
-      intercept<-has.intercept(object$formula)
       if(intercept)yX<- mapply(function(x){
                                  x<-cbind(x,rep(1,dim(x)[1]))
                                  colnames(x)[dim(x)[2]]<-"(Intercept)"
@@ -366,63 +407,25 @@ forecast.pooling<-function(object,newdata,horizon,
 
 forecast.within<-function(object,newdata,horizon,
                        inverse=function(x)x,
-                       model="pooling",   
                        output=c("pseries","pdata.frame"),
-                       levels=FALSE,    
-                       index=NULL){
+                       index=NULL,MODEL){
+    model<-MODEL$model
+    effect<-MODEL$effect 
+    lagged.endo<-MODEL$lagged.endo
+    diff.endo<-MODEL$diff.endo
+    endoname<-MODEL$endoname
+    start<-MODEL$start
+    end<-MODEL$end
+    max.lag<-MODEL$max.lag
+    time<-MODEL$time
+    mf<-MODEL$mf
+    time.column<-MODEL$time.column
+    levels<-MODEL$levels
 
-    output <- match.arg(output)
-    effect<-describe(object,"effect")
-
-    mf <- match.call(expand.dots = TRUE)
-    m <- match(c("formula", "data", "subset", "na.action", "index"),names(mf),0)
-    mf <- mf[c(1,m)]
-    mf$drop.unused.levels <- TRUE
-    mf[[1]] <- as.name("plm")
-    mf$model <- NA
-    mf$formula <- formula(object$formula)
-    mf$na.action <- "na.pass"
-    mf$data <- as.name("newdata")
-    mf$index <- eval(expression(index),list(index=index))
-
-    #Format the data as pdata.frame   
-    if (inherits(newdata, "pdata.frame") && !is.null(index)) 
-        warning("the index argument is ignored because data is a pdata.frame")
-    if (!inherits(newdata, "pdata.frame")) 
-        newdata <- pdata.frame(newdata, index)
-
-    index <- attr(newdata, "index")
-    pdim <- pdim(newdata)
-    pdim.model <- attr(object,"pdim")
-    time <- pdim$panel.names$time.names
-
-    #Check for non-existant times
-    horizon <- factor(horizon,levels=pdim$panel.names$time.names)    
-    if(sum(is.na(horizon))>0)
-      stop("The forecast horizon containts times not present in supplied data")
-    
-    #Make horizon continuous
-    start <- which(time == horizon[1])
-    end <- which(time == horizon[length(horizon)])
-    if(end<start) stop("The end of forecast horizon is earlier than the start")
-    horizon <- time[start:end]
-    #######
-    max.lag <- max(sapply(dynterms(object$formula),max))+1
-    time <- pdim$panel.names$time.names
-    time.column <- colnames(index)[2]
-
-    #Identifying if the set of explantory variables have a lagged dependent
-    #variable
-    
-    lagged.var<-names(which(mapply(function(x)x>0,dynterms(object))==TRUE))
-    endoname <- all.vars(object$formula[[2]])
-    lagged.endo<-length(grep(endoname,lagged.var))>0
-    endo<-strsplit(as.character(object$formula),"~")[[2]]
-    diff.endo<-length(grep("diff",endo))>0
-
+    coeffs<-if((effect=="twoways"|effect=="time")& model!="within") c(coef(object),fixef(object,effect="time"))
+              else coef(object)
+    if(lagged.endo)FIT<-NULL
     i<-start
-    if(lagged.endo) FIT<-NULL 
-    
     while(i<=end){
       
       et <-if(lagged.endo)time[1:(i)]#+1)]i-max.lag 
@@ -440,8 +443,7 @@ forecast.within<-function(object,newdata,horizon,
         var.mean<-WITHIN$var.mean
       }
       
-      coeffs<-if((effect=="twoways"|effect=="time")& model!="within") c(coef(object),fixef(object,effect="time"))
-              else coef(object)
+      
     
       if(effect=="twoways"|effect=="time") {
             combined.time <- factor(sort(unique(c(names(fixef(object,effect="time")),pdim(newdata)$panel.names$time.names))))  
@@ -476,10 +478,10 @@ fix.effect<-as.list(fixef(object,effect="individual"))
       }
       else fit<-prodXc
 
-      if(lagged.endo){
+      if(lagged.endo&model=="within"){
          temp<-ldply(fit,function(l)data.frame(time=rownames(l),l))
          FIT<-rbind(FIT,temp[temp[,2]==time[i],])
-         if(model=="within")fit=switch(effect,
+         fit=switch(effect,
                                         individual=mapply(function(x,y,z){
                                                     ind.part<-as.numeric(crossprod(y[-1],coeffs))
                                                     y<-x+ind.part+z
@@ -544,12 +546,12 @@ fix.effect<-as.list(fixef(object,effect="individual"))
        newdata<-ldply(data.split,function(l)data.frame(time=rownames(l),l))
     }
     result <- newdata[,c(colnames(index),endoname)]
-    if(lagged.endo & !levels){
+    if(lagged.endo & !levels & model=="within"){
       result <- merge(result[,c(1,2)],FIT,by=c(1,2))
       colnames(result)[3]<-endoname
     }
+     if(!levels&diff.endo&lagged.endo) result[,endoname]<-diff(result[,endoname]) 
     result <- result[result[,2] %in% horizon,]
-
     if(output == "pseries") result <- result[,3]
 
     result
@@ -605,79 +607,42 @@ trans<-function(X1,X2,effect,time.column,theta=1,intercept=FALSE){
 }
 
 
+
 forecast.random<-function(object,newdata,horizon,
                        inverse=function(x)x,
                        output=c("pseries","pdata.frame"),
-                       levels=FALSE,    
-                       index=NULL){
+                       index=NULL,MODEL){
 
-    output <- match.arg(output)
-    effect<-describe(object,"effect")
-
-    mf <- match.call(expand.dots = TRUE)
-    m <- match(c("formula", "data", "subset", "na.action", "index"),names(mf),0)
-    mf <- mf[c(1,m)]
-    mf$drop.unused.levels <- TRUE
-    mf[[1]] <- as.name("plm")
-    mf$model <- NA
-    mf$formula <- formula(object$formula)
-    mf$na.action <- "na.pass"
-    mf$data <- as.name("newdata")
-    mf$index <- eval(expression(index),list(index=index))
-
-    #Format the data as pdata.frame   
-    if (inherits(newdata, "pdata.frame") && !is.null(index)) 
-        warning("the index argument is ignored because data is a pdata.frame")
-    if (!inherits(newdata, "pdata.frame")) 
-        newdata <- pdata.frame(newdata, index)
-
-    index <- attr(newdata, "index")
-    pdim <- pdim(newdata)
-    pdim.model <- attr(object,"pdim")
-    time <- pdim$panel.names$time.names
-
-    #Check for non-existant times
-    horizon <- factor(horizon,levels=pdim$panel.names$time.names)    
-    if(sum(is.na(horizon))>0)
-      stop("The forecast horizon containts times not present in supplied data")
-    
-    #Make horizon continuous
-    start <- which(time == horizon[1])
-    end <- which(time == horizon[length(horizon)])
-    if(end<start) stop("The end of forecast horizon is earlier than the start")
-    horizon <- time[start:end]
-    #######
-    max.lag <- max(sapply(dynterms(object$formula),max))+1
-    time <- pdim$panel.names$time.names
-    time.column <- colnames(index)[2]
-
-    #Identifying if the set of explantory variables have a lagged dependent
-    #variable
-    
-    lagged.var<-names(which(mapply(function(x)x>0,dynterms(object))==TRUE))
-    endoname <- all.vars(object$formula[[2]])
-    lagged.endo<-length(grep(endoname,lagged.var))>0
-    endo<-strsplit(as.character(object$formula),"~")[[2]]
-    diff.endo<-length(grep("diff",endo))>0
-
-    # theta for random transformation
+    model<-MODEL$model
+    effect<-MODEL$effect 
+    lagged.endo<-MODEL$lagged.endo
+    diff.endo<-MODEL$diff.endo
+    endoname<-MODEL$endoname
+    start<-MODEL$start
+    end<-MODEL$end
+    max.lag<-MODEL$max.lag
+    time<-MODEL$time
+    mf<-MODEL$mf
+    time.column<-MODEL$time.column
+    levels<-MODEL$levels
 
     theta<-object$ercomp$theta
-    if(lagged.endo) FIT<-NULL
+    coeffs<-coef(object)
+    intercept<-has.intercept(object$formula)
     i<-start
+    if(lagged.endo)FIT<-NULL
+
     while(i<=end){
       
       #et <-if(lagged.endo|diff.endo)time[(i-max.lag):(i+1)] 
       #else time[(start-max.lag):end]
-      et <-if(lagged.endo)time[1:(i)]#+1)]i-max.lag 
-            else time[(start-max.lag):end]
+      et <-if(lagged.endo)time[1:(i)]#+1)]i-max.lag
+           else time[(start-max.lag):end]
        
       fdata <- eval(mf, list(newdata=as.data.frame(newdata[newdata[,time.column]%in%et])))
       attr(fdata,"formula") <- formula(object$formula)
       yX <- extract.data(fdata)
-      coeffs<-coef(object)
-      intercept<-has.intercept(object$formula)
-      if(intercept)yX<- mapply(function(x){
+       if(intercept)yX<- mapply(function(x){
                                  x<-cbind(x,rep(1,dim(x)[1]))
                                  colnames(x)[dim(x)[2]]<-"(Intercept)"
                                  temp<-colnames(x)[-c(1,dim(x)[2])]
@@ -685,7 +650,8 @@ forecast.random<-function(object,newdata,horizon,
                                  colnames(x)[-c(1,2)]<-temp
                                  x
                                },
-                              yX,SIMPLIFY=FALSE)
+                               yX,SIMPLIFY=FALSE)
+      
       RANDOM<-trans(yX,fdata,effect,time.column,theta,intercept)
       yX<-RANDOM$res
       time.mean<-RANDOM$time.mean
