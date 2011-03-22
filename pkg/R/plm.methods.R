@@ -82,6 +82,7 @@ print.summary.plm <- function(x,digits= max(3, getOption("digits") - 2),
 fitted.plm <- function(object, model = NULL,output=c("pseries","pdata.frame"),...){
   # there are two 'models' used ; the fitted model and the
   # transformation used for the fitted values
+  if(length(output)==2)output=NULL
   fittedmodel <- describe(object, "model")
   if (is.null(model)) model <- fittedmodel
   effect <- describe(object, "effect")
@@ -118,9 +119,11 @@ fitted.plm <- function(object, model = NULL,output=c("pseries","pdata.frame"),..
   else{
     fv <- as.numeric(crossprod(t(X), beta))
   }
-  fv<-data.frame(attributes(object$model)$index,value=fv)
-  fv<-pdata.frame(fv)
-  if(output=="pseries")fv<-fv[,"value"]
+  if(!is.null(output)){
+    fv<-data.frame(attributes(object$model)$index,value=fv)
+    fv<-pdata.frame(fv)
+    if(output=="pseries")fv<-fv[,"value"]
+  }
   fv
 }
 
