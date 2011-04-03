@@ -143,8 +143,10 @@ predict.plm <- function(object, newdata = NULL,horizon=NULL,
   #  beta <- coef(object)
   #  result <- as.numeric(crossprod(beta, t(X)))
   #}
-  else
-    forecast(object,newdata,horizon,inverse,output,index,...)
+  else{
+    levels<-if(is.null(list(...)[["levels"]]))FALSE else list(...)[["levels"]]
+    forecast(object,newdata,horizon,inverse,output,index,levels,...)
+  }  
   result
 }
 
@@ -242,10 +244,9 @@ describe <- function(x,
 forecast.plm<-function(object,newdata,horizon,
                        inverse=function(x)x,
                        output=c("pseries","pdata.frame"),
-                       index=NULL,...){
+                       index=NULL,levels=FALSE,...){
 
-    levels<-if(is.null(list(...)[["levels"]]))FALSE else list(...)[["levels"]]
-    output <- match.arg(output)
+        output <- match.arg(output)
     effect<-describe(object,"effect")
     fittedmodel<-describe(object,"model")
     
