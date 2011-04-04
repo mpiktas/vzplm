@@ -145,7 +145,7 @@ predict.plm <- function(object, newdata = NULL,horizon=NULL,
   #}
   else{
     levels<-if(is.null(list(...)[["levels"]]))FALSE else list(...)[["levels"]]
-    forecast(object,newdata,horizon,inverse,output,index,levels,...)
+    forecast.plm(object,newdata,horizon,inverse,output,index,levels,...)
   }  
   result
 }

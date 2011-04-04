@@ -45,6 +45,9 @@ S3method(vcov, panelmodel)
 #plm
 S3method(summary, plm)
 S3method(print, summary.plm)
+S3method(fitted,plm)
+S3method(predict,plm)
+
 #pgmm
 S3method(coef, pgmm)
 S3method(summary, pgmm)
