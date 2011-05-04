@@ -1,11 +1,11 @@
-Package: plm
-Version: 1.2-7
-Date: 2011-02-03
+Package: EMplm
+Version: 1.0
+Date: 2011-05-04
 Title: Linear Models for Panel Data
-Author: Yves Croissant <yves.croissant@univ-reunion.fr>, Giovanni Millo <Giovanni_Millo@Generali.com>
-Maintainer: Yves Croissant <yves.croissant@univ-reunion.fr>
+Author: Andrius Dalinkevicius <adalinkevicius@gmail.com>, EM
+Maintainer: Andrius Dalinkevicius <adalinkevicius@gmail.com>
 Depends:R (>= 2.10), stats, bdsmatrix, nlme, Formula (>= 0.2-0), MASS, sandwich, plyr
 Suggests: lmtest, car
-Description: A set of estimators and tests for panel data.
+Description: An extension of the plm package with predict and forecast functions.
 License: GPL (>=2)
-URL: http://www.R-project.org
+
