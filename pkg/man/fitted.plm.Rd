@@ -11,9 +11,10 @@
         output=c("pseries","pdata.frame"),
         index=NULL,...)
 
-\method{fitted}{plm}(object,model=NULL,output=c("pseries","pdata.frame"),...)
+\method{fitted}{plm}(object,model="pooling",output=c("pseries","pdata.frame"),...)
 
-forecast.plm(object, newdata, horizon,
+
+\method{forecast}{plm}(object, newdata, horizon,
              inverse = function(x)x, 
              output = c("pseries","pdata.frame"),
              index=NULL,levels,...)
@@ -34,9 +35,9 @@ forecast.plm(object, newdata, horizon,
   \item{horizon}{the time horizon for the forecast. Must be character
     with values present in pdim attribute of data.}
   \item{inverse}{if the left-hand side variable is transformed for
-  estimation, the inverse transformation needs to be supplied}
-  \item{index}{the indexes}
-  \item{levels}{meaningful if a panel data model are estimated in first
+  estimation, the inverse transformation needs to be supplied.}
+  \item{index}{the indexes.}
+  \item{levels}{meaningful if a panel data model is estimated in first
   diffecences. If FALSE then results are returned in first differences
   and in levels otherwise.}
   \item{\dots}{further arguments.}

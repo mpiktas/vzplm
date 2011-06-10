@@ -14,11 +14,10 @@
         index=NULL,...)
 
 \method{fitted}{pgmm}(object,output=c("pseries","pdata.frame"),...)
-
-forecast.pgmm(object, data, horizon,
+\method{forecast}{pgmm}(object, data, horizon,
              inverse = function(x)x, 
              output = c("pseries","pdata.frame"),
-             index=NULL)
+             index=NULL,...)
 }
 
 \arguments{

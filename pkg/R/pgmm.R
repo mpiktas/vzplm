@@ -371,7 +371,7 @@ dynterms <- function(x){
 forecast.pgmm <- function(object,data,horizon,
                           inverse = function(x)x,
                           output = c("pseries","pdata.frame"),
-                          index=NULL
+                          index=NULL,...
                           ) {   
     output <- match.arg(output)
     

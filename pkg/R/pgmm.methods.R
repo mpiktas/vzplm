@@ -247,7 +247,7 @@ predict.pgmm <- function(object,data,horizon=NULL,
         fitted(object,output=output,...)
     }
     else {
-        forecast.pgmm(object,data,horizon,inverse,output,index)
+        forecast.pgmm(object,data,horizon,inverse,output,index,...)
     }
     
 }

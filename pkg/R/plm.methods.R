@@ -79,7 +79,7 @@ print.summary.plm <- function(x,digits= max(3, getOption("digits") - 2),
   invisible(x)
 }
 
-fitted.plm <- function(object, model = NULL,output=c("pseries","pdata.frame"),...){
+fitted.plm <- function(object, model = "pooling",output=c("pseries","pdata.frame"),...){
   # there are two 'models' used ; the fitted model and the
   # transformation used for the fitted values
   if(length(output)==2)output=NULL
@@ -239,7 +239,7 @@ describe <- function(x,
            cl$transformation, "d")
          )
 }
-         
+
 
 forecast.plm<-function(object,newdata,horizon,
                        inverse=function(x)x,
@@ -335,6 +335,7 @@ forecast.pooling<-function(object,newdata,horizon,
       time.column<-MODEL$time.column
       levels<-MODEL$levels
   
+
       if(lagged.endo) FIT<-NULL
       coeffs<-coef(object)
       intercept<-has.intercept(object$formula)
@@ -741,4 +742,131 @@ forecast.random<-function(object,newdata,horizon,
 }
 
 
+EMplm.res<-function(object,output=c("pseries","pdata.frame")){
+  index<-attributes(object$model)$index
+  actual<-object$model[,1]
+  fitted.values<-fitted(object,model="pooling")
+  res<-pdata.frame(cbind(index,res=actual-fitted.values))
+  if(output=="pseries") res<-res[,"res"]
+  res
+}  
 
+stats<-function (object,freq=NULL,...) 
+UseMethod("stats")
+
+
+
+
+stats.plm<-function(object,freq=NULL,...){
+  index<-attributes(object$model)$index
+  actual<-object$model[,1]
+  y<-pdata.frame(cbind(index,y=actual))
+  fit<-fitted(object,output="pdata.frame",...)
+  data.split <- split(as.data.frame(cbind(y,fit=fit$value)), index[[1]])
+  time.split <- split(index[[2]], index[[1]])
+  data.split <- mapply(function(x, y){
+                         rownames(x) <- y
+                         x
+                       }, data.split, time.split, SIMPLIFY = FALSE)
+  data.split.naive<-mapply(function(x){
+                            naive<-fit.naive(x$y,freq)
+                            res<-cbind(x,naive)
+                            res
+                          }, data.split, SIMPLIFY = FALSE)     
+   statistics<-mapply(function(x){
+                            mape<-EMplm.MAPE(x$y,x$fit)
+                            mase<-EMplm.MASE(x$y,x$fit,x$naive)
+                            R2<-EMplm.R2(x$y,x$fit)
+                            mae<-EMplm.MAE(x$y,x$fit)
+                            res<-data.frame(mape=mape,mase=mase,R2=R2,mae=mae)
+                            rownames(res)<-NULL
+                            res
+                          }, data.split.naive, SIMPLIFY = FALSE)
+  statistics
+}  
+
+stats.pgmm<-function(object,freq=NULL,...){
+  index<-object$index
+  index.name<-colnames(index)
+  fit<-fitted(object,output="pdata.frame",...)
+  colnames(fit)[3]<-"fit"
+  fit<-split(fit, index[,1])
+  data <- mapply(function(x,y){
+                    naive<-fit.naive(x[,1],freq)
+                    res<-data.frame(y[,colnames(y)%in%index.name],y=x[,1],fit=as.numeric(y[,"fit"]),naive=naive)
+                    res
+                    },object$data,fit,SIMPLIFY = FALSE)
+  statistics<-mapply(function(x){
+                            mape<-EMplm.MAPE(x$y,x$fit)
+                            mase<-EMplm.MASE(x$y,x$fit,x$naive)
+                            R2<-EMplm.R2(x$y,x$fit)
+                            mae<-EMplm.MAE(x$y,x$fit)
+                            res<-data.frame(mape=mape,mase=mase,R2=R2,mae=mae)
+                            rownames(res)<-NULL
+                            res
+                          }, data, SIMPLIFY = FALSE)
+  statistics
+}  
+
+
+fit.naive<-function(x,freq){
+  freq<-if(is.null(freq))1 else freq
+  res<-rep(NA,length(x))
+  res[(freq+1):length(res)]<-x[1:(length(x)-freq)]
+  res
+}
+
+EMplm.MAPE<-function(o,p){
+   #calculates MAPE
+   #o observed data
+   #p predicted data
+   o <- as.numeric(as.character(o))
+   p <- as.numeric(as.character(p))
+   temp<-data.frame(100*abs((o - p)/o))
+   if(all(is.na(temp))) MAPE <- NA else { 
+   if(any(na.omit(temp)==Inf|na.omit(temp)==-Inf)){
+     warning("Division by zero!!!")
+     temp[which(temp==Inf|temp==-Inf),]<-NA
+   }
+   MAPE <- mean(temp, na.rm=TRUE)}
+   names(MAPE)<-"MAPE"
+   MAPE
+}
+
+EMplm.MASE<-function(o,p,naive){
+   #calculates MASE
+   #o observed data
+   #p predicted data
+   o <- as.numeric(as.character(o))
+   p <- as.numeric(as.character(p))
+   insampleMAE<-mean(abs(o-naive), na.rm=TRUE)
+   if(insampleMAE==0)stop("Division by zero!!!")
+   d<-cbind(o,p,naive)
+   MASE<-mean(abs((d[,"o"]-d[,"p"])/insampleMAE), na.rm=TRUE)
+   names(MASE)<-"MASE"
+   MASE
+}
+
+
+EMplm.R2<-function(o,p){
+  #calculates R-squared
+  #o observed data
+  #p predicted data
+  #mo<-mean(o,na.rm=TRUE)
+  #ssr <- sum((p - o)^2)
+  #tss <- sum((o - mo)^2)
+  #R2<-1-(ssr/tss)
+  #R2
+  R2<-cor(o,p,use="complete.obs")^2
+  R2
+}  
+
+EMplm.MAE<-function(o,p){
+  #calculates MAE
+  #o observed data
+  #p predicted data
+  MAE<-mean(abs(p-o),na.rm=TRUE)
+  MAE
+}  
+
+        

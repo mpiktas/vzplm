@@ -4,7 +4,7 @@ Date: 2011-05-04
 Title: Linear Models for Panel Data
 Author: Andrius Dalinkevicius <adalinkevicius@gmail.com>, EM
 Maintainer: Andrius Dalinkevicius <adalinkevicius@gmail.com>
-Depends:R (>= 2.10), stats, bdsmatrix, nlme, Formula (>= 0.2-0), MASS, sandwich, plyr
+Depends:R (>= 2.10), stats, bdsmatrix, nlme, Formula (>= 0.2-0), MASS, sandwich, plyr, forecast
 Suggests: lmtest, car
 Description: An extension of the plm package with predict and forecast functions.
 License: GPL (>=2)

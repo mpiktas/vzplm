@@ -2,9 +2,10 @@ export(plm, pvcm, pgmm, pggls, pht, plm.data, plmtest, phtest, pFtest,
        pvar, pdim, pooltest, dynformula, sargan, mtest, ercomp, pvcovHC,
        pbsytest, pdwtest, pbgtest, pbltest, pwartest, pwtest, pwfdtest, pcdtest,
        pdata.frame, between, Between, Within, pFormula, pmodel.response,
-       purtest, vcovBK, vcovSCC, r.squared, forecast.pgmm, forecast.plm)
+       purtest, vcovBK, vcovSCC, r.squared, stats)#, forecast.pgmm, forecast.plm)
 import(stats)
 import(Formula)
+importFrom(forecast, forecast)
 importFrom(bdsmatrix, bdsmatrix)  
 importFrom(sandwich, vcovHC)
 importFrom(nlme, fixef)
@@ -47,13 +48,16 @@ S3method(summary, plm)
 S3method(print, summary.plm)
 S3method(fitted,plm)
 S3method(predict,plm)
-
+S3method(forecast,plm)
+S3method(stats,plm)
 #pgmm
 S3method(coef, pgmm)
 S3method(summary, pgmm)
 S3method(print, summary.pgmm)
 S3method(fitted,pgmm)
 S3method(predict,pgmm)
+S3method(forecast, pgmm)
+S3method(stats, pgmm)
 #pvcm
 S3method(summary, pvcm)
 S3method(print, summary.pvcm)
